@@ -2,9 +2,16 @@
 
 Install rustup on your system https://rustup.rs/
 
-In the directory with ```cargo.toml``` run the following command
+Clone the repo
+
+```git clone https://github.com/skep1337/portscan```
+
+Go into the directory and build
+
+```cd portscan```
 
 ```cargo build -r```
+
 
 The executable will be in ```target/release```
 
