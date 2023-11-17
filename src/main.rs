@@ -53,18 +53,12 @@ fn grab_banner(ip: &str, port: u16, timeout: u64) -> String
 
 fn dns_resolve(hostname: &str) -> String
 {
-    let socket_addrs = (hostname, 0).to_socket_addrs();
-
-    if let Ok(mut addrs) = socket_addrs {
-        if let Some(addr) = addrs.next() {
-            return addr.ip().to_string();
-        }
-    } else {
-        eprintln!("Hostname resolve failed");
-        std::process::exit(1);
+    if let Some(addr) = (hostname, 0).to_socket_addrs().unwrap().next()
+    {
+        return addr.ip().to_string();
     }
 
-    String::default()
+    std::process::exit(1);
 }
 
 fn set_terminal_title(title: &str)
