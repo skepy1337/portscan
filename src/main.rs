@@ -7,10 +7,14 @@ use threadpool::ThreadPool;
 
 macro_rules! parse_arg {
     ($args:expr, $short:expr, $long:expr, $var:expr, $msg:expr) => {
-        if let Some(index) = $args.iter().position(|arg| arg == $short || arg == $long) {
-            if let Ok(parsed_num) = $args[index + 1].parse() {
+        if let Some(index) = $args.iter().position(|arg| arg == $short || arg == $long)
+        {
+            if let Ok(parsed_num) = $args[index + 1].parse()
+            {
                 $var = parsed_num;
-            } else {
+            }
+            else
+            {
                 eprintln!($msg);
                 std::process::exit(1);
             }
@@ -21,10 +25,13 @@ macro_rules! parse_arg {
 fn is_port_open(ip: &str, port: u16, timeout: u64) -> bool
 {
     let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr {
+    if let Ok(ip_addr) = ip_addr
+    {
         let socket_addr = SocketAddr::new(ip_addr, port);
         TcpStream::connect_timeout(&socket_addr, Duration::from_secs(timeout)).is_ok()
-    } else {
+    }
+    else
+    {
         eprintln!("Could not parse ip: {}", ip);
         std::process::exit(1);
     }
@@ -33,7 +40,8 @@ fn is_port_open(ip: &str, port: u16, timeout: u64) -> bool
 fn grab_banner(ip: &str, port: u16, timeout: u64) -> String
 {
     let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr {
+    if let Ok(ip_addr) = ip_addr
+    {
         let socket_addr = SocketAddr::new(ip_addr, port);
 
         if let Ok(mut stream) =
@@ -53,18 +61,13 @@ fn grab_banner(ip: &str, port: u16, timeout: u64) -> String
 
 fn dns_resolve(hostname: &str) -> String
 {
-    let socket_addrs = (hostname, 0).to_socket_addrs();
-
-    if let Ok(mut addrs) = socket_addrs {
-        if let Some(addr) = addrs.next() {
-            return addr.ip().to_string();
-        }
-    } else {
-        eprintln!("Hostname resolve failed");
-        std::process::exit(1);
+    if let Some(addr) = (hostname, 0).to_socket_addrs().unwrap().next()
+    {
+        return addr.ip().to_string();
     }
 
-    String::default()
+    eprintln!("Failed to resolve hostname");
+    std::process::exit(1);
 }
 
 fn set_terminal_title(title: &str)
@@ -100,7 +103,8 @@ fn print_colored_text(text: &str, color: Color)
 fn main()
 {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
+    if args.len() < 2
+    {
         println!(
             "Usage: {} <IP address / hostname>\n
             \rOptions: 
@@ -129,13 +133,16 @@ fn main()
     parse_arg!(&args, "-t", "--threads", num_threads, "-t <threads>");
     parse_arg!(&args, "-T", "--timeout", timeout, "-T <timeout in seconds>");
 
-    if num_threads < 1 {
+    if num_threads < 1
+    {
         eprintln!("Minimum 1 thread");
         std::process::exit(1);
     }
 
-    for arg in &args {
-        if arg.contains("-n") || arg.contains("--nobanner") {
+    for arg in &args
+    {
+        if arg.contains("-n") || arg.contains("--nobanner")
+        {
             get_banner = false;
         }
     }
@@ -143,7 +150,8 @@ fn main()
     let stdout = Arc::new(Mutex::new(StandardStream::stdout(ColorChoice::Always)));
     let pool = ThreadPool::new(num_threads);
 
-    for port in start_port..=end_port {
+    for port in start_port..=end_port
+    {
         let target = target.to_string();
         let stdout_clone = Arc::clone(&stdout);
 
@@ -152,20 +160,27 @@ fn main()
             set_terminal_title(&format!("Probing {} on port {}", target, port));
             drop(stdout);
 
-            if is_port_open(&target, port, timeout) {
+            if is_port_open(&target, port, timeout)
+            {
                 let stdout = stdout_clone.lock().unwrap();
 
                 print!("\nPort ");
                 print_colored_text(&port.to_string(), Color::Green);
 
-                if get_banner {
+                if get_banner
+                {
                     let banner = grab_banner(&target, port, timeout);
-                    if !banner.is_empty() {
+                    if !banner.is_empty()
+                    {
                         println!(" is open, banner:\n\n\r{}", banner.trim_end());
-                    } else {
+                    }
+                    else
+                    {
                         println!(" is open");
                     }
-                } else {
+                }
+                else
+                {
                     println!(" is open");
                 }
 
