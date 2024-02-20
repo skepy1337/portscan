@@ -160,32 +160,34 @@ fn main()
             set_terminal_title(&format!("Probing {} on port {}", target, port));
             drop(stdout);
 
-            if is_port_open(&target, port, timeout)
+            if !is_port_open(&target, port, timeout)
             {
-                let stdout = stdout_clone.lock().unwrap();
+                return;
+            }
 
-                print!("\nPort ");
-                print_colored_text(&port.to_string(), Color::Green);
+            let stdout = stdout_clone.lock().unwrap();
 
-                if get_banner
+            print!("\nPort ");
+            print_colored_text(&port.to_string(), Color::Green);
+
+            if !get_banner
+            {
+                println!(" is open");
+            }
+            else
+            {
+                let banner = grab_banner(&target, port, timeout);
+                if !banner.is_empty()
                 {
-                    let banner = grab_banner(&target, port, timeout);
-                    if !banner.is_empty()
-                    {
-                        println!(" is open, banner:\n\n\r{}", banner.trim_end());
-                    }
-                    else
-                    {
-                        println!(" is open");
-                    }
+                    println!(" is open, banner:\n\n\r{}", banner.trim_end());
                 }
                 else
                 {
                     println!(" is open");
                 }
-
-                drop(stdout);
             }
+
+            drop(stdout);
         });
     }
 
