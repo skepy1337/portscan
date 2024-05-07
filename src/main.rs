@@ -150,6 +150,8 @@ fn main()
     let stdout = Arc::new(Mutex::new(StandardStream::stdout(ColorChoice::Always)));
     let pool = ThreadPool::new(num_threads);
 
+    println!("Scanning host: {}", target);
+
     for port in start_port..=end_port
     {
         let target = target.to_string();
@@ -157,7 +159,7 @@ fn main()
 
         pool.execute(move || {
             let stdout = stdout_clone.lock().unwrap();
-            set_terminal_title(&format!("Probing {} on port {}", target, port));
+            set_terminal_title(&format!("Probing port {}", port));
             drop(stdout);
 
             if !is_port_open(&target, port, timeout)
