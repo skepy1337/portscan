@@ -35,10 +35,10 @@ fn grab_banner(ip: &str, port: u16, timeout: u64) -> String {
         let socket_addr = SocketAddr::new(ip_addr, port);
 
         if let Ok(mut stream) =
-            TcpStream::connect_timeout(&socket_addr, Duration::from_secs(timeout))
+            TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout))
         {
             let mut response = Vec::new();
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(timeout)));
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(timeout)));
             let _ = stream.write_all(b"hai\r\n");
             let _ = stream.read_to_end(&mut response);
 
@@ -109,7 +109,7 @@ fn main() {
     let mut num_threads = 200;
     let mut start_port = 1;
     let mut end_port = 65535;
-    let mut timeout = 1;
+    let mut timeout = 1000;
     let mut get_banner = true;
 
     parse_arg!(&args, "-min", "--minport", start_port, "-min <port>");
