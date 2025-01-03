@@ -7,14 +7,10 @@ use threadpool::ThreadPool;
 
 macro_rules! parse_arg {
     ($args:expr, $short:expr, $long:expr, $var:expr, $msg:expr) => {
-        if let Some(index) = $args.iter().position(|arg| arg == $short || arg == $long)
-        {
-            if let Ok(parsed_num) = $args[index + 1].parse()
-            {
+        if let Some(index) = $args.iter().position(|arg| arg == $short || arg == $long) {
+            if let Ok(parsed_num) = $args[index + 1].parse() {
                 $var = parsed_num;
-            }
-            else
-            {
+            } else {
                 eprintln!($msg);
                 std::process::exit(1);
             }
@@ -22,26 +18,20 @@ macro_rules! parse_arg {
     };
 }
 
-fn is_port_open(ip: &str, port: u16, timeout: u64) -> bool
-{
+fn is_port_open(ip: &str, port: u16, timeout: u64) -> bool {
     let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr
-    {
+    if let Ok(ip_addr) = ip_addr {
         let socket_addr = SocketAddr::new(ip_addr, port);
-        TcpStream::connect_timeout(&socket_addr, Duration::from_secs(timeout)).is_ok()
-    }
-    else
-    {
+        TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout)).is_ok()
+    } else {
         eprintln!("Could not parse ip: {}", ip);
         std::process::exit(1);
     }
 }
 
-fn grab_banner(ip: &str, port: u16, timeout: u64) -> String
-{
+fn grab_banner(ip: &str, port: u16, timeout: u64) -> String {
     let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr
-    {
+    if let Ok(ip_addr) = ip_addr {
         let socket_addr = SocketAddr::new(ip_addr, port);
 
         if let Ok(mut stream) =
@@ -59,10 +49,8 @@ fn grab_banner(ip: &str, port: u16, timeout: u64) -> String
     String::default()
 }
 
-fn dns_resolve(hostname: &str) -> String
-{
-    if let Some(addr) = (hostname, 0).to_socket_addrs().unwrap().next()
-    {
+fn dns_resolve(hostname: &str) -> String {
+    if let Some(addr) = (hostname, 0).to_socket_addrs().unwrap().next() {
         return addr.ip().to_string();
     }
 
@@ -70,8 +58,7 @@ fn dns_resolve(hostname: &str) -> String
     std::process::exit(1);
 }
 
-fn set_terminal_title(title: &str)
-{
+fn set_terminal_title(title: &str) {
     // i hate microsoft
     #[cfg(target_os = "windows")]
     {
@@ -88,8 +75,7 @@ fn set_terminal_title(title: &str)
     }
 }
 
-fn print_colored_text(text: &str, color: Color)
-{
+fn print_colored_text(text: &str, color: Color) {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut color_spec = ColorSpec::new();
 
@@ -100,11 +86,9 @@ fn print_colored_text(text: &str, color: Color)
     stdout.reset().unwrap();
 }
 
-fn main()
-{
+fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2
-    {
+    if args.len() < 2 {
         println!(
             "Usage: {} <IP address / hostname>\n
             \rOptions: 
@@ -115,7 +99,7 @@ fn main()
             \r[-n, --nobanner]\n
             \rIt is not required to have both min and max ports
             \rExample: '-min 1024 -max 1337' or just '-min 22'\n
-            \rDefaults: All ports, 200 threads, 1 second timeout\n",
+            \rDefaults: All ports, 200 threads, 1000 ms timeout\n",
             args[0]
         );
         std::process::exit(0);
@@ -131,18 +115,15 @@ fn main()
     parse_arg!(&args, "-min", "--minport", start_port, "-min <port>");
     parse_arg!(&args, "-max", "--maxport", end_port, "-max <port>");
     parse_arg!(&args, "-t", "--threads", num_threads, "-t <threads>");
-    parse_arg!(&args, "-T", "--timeout", timeout, "-T <timeout in seconds>");
+    parse_arg!(&args, "-T", "--timeout", timeout, "-T <timeout in ms>");
 
-    if num_threads < 1
-    {
+    if num_threads < 1 {
         eprintln!("Minimum 1 thread");
         std::process::exit(1);
     }
 
-    for arg in &args
-    {
-        if arg.contains("-n") || arg.contains("--nobanner")
-        {
+    for arg in &args {
+        if arg.contains("-n") || arg.contains("--nobanner") {
             get_banner = false;
         }
     }
@@ -152,8 +133,7 @@ fn main()
 
     println!("Scanning host: {}", target);
 
-    for port in start_port..=end_port
-    {
+    for port in start_port..=end_port {
         let target = target.to_string();
         let stdout_clone = Arc::clone(&stdout);
 
@@ -162,8 +142,7 @@ fn main()
             set_terminal_title(&format!("Probing port {}", port));
             drop(stdout);
 
-            if !is_port_open(&target, port, timeout)
-            {
+            if !is_port_open(&target, port, timeout) {
                 return;
             }
 
@@ -172,19 +151,13 @@ fn main()
             print!("\nPort ");
             print_colored_text(&port.to_string(), Color::Green);
 
-            if !get_banner
-            {
+            if !get_banner {
                 println!(" is open");
-            }
-            else
-            {
+            } else {
                 let banner = grab_banner(&target, port, timeout);
-                if !banner.is_empty()
-                {
+                if !banner.is_empty() {
                     println!(" is open, banner:\n\n\r{}", banner.trim_end());
-                }
-                else
-                {
+                } else {
                     println!(" is open");
                 }
             }
