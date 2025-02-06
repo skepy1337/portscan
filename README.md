@@ -4,7 +4,7 @@ Install rustup on your system https://rustup.rs/
 
 Clone the repo
 
-```git clone https://github.com/skep1337/portscan```
+```git clone https://github.com/skepy1337/portscan```
 
 Go into the directory and build
 
