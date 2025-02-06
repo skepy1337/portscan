@@ -10,6 +10,6 @@ lto = true
 strip = true
 
 [dependencies]
-termcolor = "1.4.1"
+colored = "3.0.0"
 threadpool = "1.8.1"
 winapi = { version = "0.3.9", features = ["wincon", "winnt"] }

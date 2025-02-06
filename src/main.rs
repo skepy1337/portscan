@@ -1,8 +1,7 @@
+use colored::Colorize;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use threadpool::ThreadPool;
 
 macro_rules! parse_arg {
@@ -18,48 +17,40 @@ macro_rules! parse_arg {
     };
 }
 
-fn is_port_open(ip: &str, port: u16, timeout: u64) -> bool {
-    let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr {
-        let socket_addr = SocketAddr::new(ip_addr, port);
-        TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout)).is_ok()
-    } else {
-        eprintln!("Could not parse ip: {}", ip);
-        std::process::exit(1);
-    }
+fn is_port_open(ip: IpAddr, port: u16, timeout: u64) -> bool {
+    let socket_addr = SocketAddr::new(ip, port);
+    TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout)).is_ok()
 }
 
-fn grab_banner(ip: &str, port: u16, timeout: u64) -> String {
-    let ip_addr: Result<IpAddr, _> = ip.parse();
-    if let Ok(ip_addr) = ip_addr {
-        let socket_addr = SocketAddr::new(ip_addr, port);
+fn grab_banner(ip: IpAddr, port: u16, timeout: u64) -> String {
+    let socket_addr = SocketAddr::new(ip, port);
 
-        if let Ok(mut stream) =
-            TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout))
-        {
-            let mut response = Vec::new();
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(timeout)));
-            let _ = stream.write_all(b"hai\r\n");
-            let _ = stream.read_to_end(&mut response);
+    if let Ok(mut stream) = TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout))
+    {
+        let mut response = Vec::new();
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(timeout)));
+        let _ = stream.write_all(b"hai\r\n");
+        let _ = stream.read_to_end(&mut response);
 
-            return String::from_utf8_lossy(&response).to_string();
-        }
+        return String::from_utf8_lossy(&response).to_string();
     }
 
     String::default()
 }
 
-fn dns_resolve(hostname: &str) -> String {
-    if let Some(addr) = (hostname, 0).to_socket_addrs().unwrap().next() {
-        return addr.ip().to_string();
-    }
+fn dns_resolve(hostname: &str) -> IpAddr {
+    let socket_addrs = (hostname, 0).to_socket_addrs();
 
-    eprintln!("Failed to resolve hostname");
-    std::process::exit(1);
+    match socket_addrs {
+        Ok(mut addrs) => addrs.next().unwrap().ip(),
+        Err(_) => {
+            eprintln!("Failed to resolve hostname");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn set_terminal_title(title: &str) {
-    // i hate microsoft
     #[cfg(target_os = "windows")]
     {
         use winapi::um::wincon::SetConsoleTitleW;
@@ -73,17 +64,6 @@ fn set_terminal_title(title: &str) {
     {
         print!("\x1B]2;{}\x07", title);
     }
-}
-
-fn print_colored_text(text: &str, color: Color) {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut color_spec = ColorSpec::new();
-
-    color_spec.set_fg(Some(color));
-    stdout.set_color(&color_spec).unwrap();
-
-    write!(stdout, "{}", text).unwrap();
-    stdout.reset().unwrap();
 }
 
 fn main() {
@@ -128,41 +108,32 @@ fn main() {
         }
     }
 
-    let stdout = Arc::new(Mutex::new(StandardStream::stdout(ColorChoice::Always)));
     let pool = ThreadPool::new(num_threads);
 
-    println!("Scanning host: {}", target);
+    println!("Scanning host: {}\n", target);
 
     for port in start_port..=end_port {
-        let target = target.to_string();
-        let stdout_clone = Arc::clone(&stdout);
-
         pool.execute(move || {
-            let stdout = stdout_clone.lock().unwrap();
             set_terminal_title(&format!("Probing port {}", port));
-            drop(stdout);
 
-            if !is_port_open(&target, port, timeout) {
+            if !is_port_open(target, port, timeout) {
                 return;
             }
 
-            let stdout = stdout_clone.lock().unwrap();
-
-            print!("\nPort ");
-            print_colored_text(&port.to_string(), Color::Green);
-
             if !get_banner {
-                println!(" is open");
+                println!("Port {} is open\n", port.to_string().bright_green());
             } else {
-                let banner = grab_banner(&target, port, timeout);
+                let banner = grab_banner(target, port, timeout);
                 if !banner.is_empty() {
-                    println!(" is open, banner:\n\n\r{}", banner.trim_end());
+                    println!(
+                        "Port {} is open, banner:\n\n\r{}\n",
+                        port.to_string().bright_green(),
+                        banner.trim_end()
+                    );
                 } else {
-                    println!(" is open");
+                    println!("Port {} is open\n", port.to_string().bright_green());
                 }
             }
-
-            drop(stdout);
         });
     }
 
