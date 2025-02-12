@@ -1,4 +1,5 @@
 use colored::Colorize;
+use rand::Rng;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
@@ -27,9 +28,14 @@ fn grab_banner(ip: IpAddr, port: u16, timeout: u64) -> String {
 
     if let Ok(mut stream) = TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout))
     {
+        let mut data: [u8; 3] = [0; 3];
+        let mut rng = rand::rng();
+        rng.fill(&mut data);
+        let probe = format!("{}\r\n", String::from_utf8_lossy(&data));
+
         let mut response = Vec::new();
         let _ = stream.set_read_timeout(Some(Duration::from_millis(timeout)));
-        let _ = stream.write_all(b"hai\r\n");
+        let _ = stream.write_all(probe.as_bytes());
         let _ = stream.read_to_end(&mut response);
 
         return String::from_utf8_lossy(&response).to_string();
