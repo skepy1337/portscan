@@ -1,9 +1,11 @@
 use colored::Colorize;
-use rand::Rng;
-use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
-use std::time::Duration;
-use threadpool::ThreadPool;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use tokio::sync::Semaphore;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time::{Duration, timeout},
+};
 
 macro_rules! parse_arg {
     ($args:expr, $short:expr, $long:expr, $var:expr, $msg:expr) => {
@@ -18,30 +20,61 @@ macro_rules! parse_arg {
     };
 }
 
-fn is_port_open(ip: IpAddr, port: u16, timeout: u64) -> bool {
-    let socket_addr = SocketAddr::new(ip, port);
-    TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout)).is_ok()
+pub struct Rand {
+    state: u8,
 }
 
-fn grab_banner(ip: IpAddr, port: u16, timeout: u64) -> String {
-    let socket_addr = SocketAddr::new(ip, port);
-
-    if let Ok(mut stream) = TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout))
-    {
-        let mut data: [u8; 3] = [0; 3];
-        let mut rng = rand::rng();
-        rng.fill(&mut data);
-        let probe = format!("{}\r\n", String::from_utf8_lossy(&data));
-
-        let mut response = Vec::new();
-        let _ = stream.set_read_timeout(Some(Duration::from_millis(timeout)));
-        let _ = stream.write_all(probe.as_bytes());
-        let _ = stream.read_to_end(&mut response);
-
-        return String::from_utf8_lossy(&response).to_string();
+impl Rand {
+    pub fn new() -> Self {
+        let seed: u8 = rand::random();
+        Self { state: seed }
     }
 
-    String::default()
+    fn next(&mut self) -> u8 {
+        self.state ^= self.state << 7;
+        self.state ^= self.state >> 5;
+        self.state ^= self.state << 3;
+        self.state
+    }
+}
+
+async fn is_port_open(ip: IpAddr, port: u16, timeout_ms: Duration) -> bool {
+    let socket_addr = SocketAddr::new(ip, port);
+
+    timeout(timeout_ms, TcpStream::connect(&socket_addr))
+        .await
+        .is_ok()
+}
+
+async fn grab_banner(ip: IpAddr, port: u16, timeout_ms: Duration) -> String {
+    let addr = SocketAddr::new(ip, port);
+
+    let mut stream = match timeout(timeout_ms, TcpStream::connect(addr)).await {
+        Ok(Ok(s)) => s,
+        _ => return String::new(),
+    };
+
+    let mut rng = Rand::new();
+    let mut data: Vec<u8> = Vec::with_capacity(5);
+    for _ in 0..data.capacity() {
+        data.push(rng.next() / 2 /*128 max*/);
+    }
+
+    let string: String = data.iter().map(|&x| x as char).collect();
+    let probe = format!("{}\r\n", string);
+    let mut response = Vec::new();
+
+    if timeout(timeout_ms, stream.write_all(probe.as_bytes()))
+        .await
+        .is_err()
+    {
+        return String::new();
+    }
+
+    match timeout(timeout_ms, stream.read_to_end(&mut response)).await {
+        Ok(Ok(_)) => String::from_utf8_lossy(&response).to_string(),
+        _ => String::new(),
+    }
 }
 
 fn dns_resolve(hostname: &str) -> IpAddr {
@@ -72,7 +105,8 @@ fn set_terminal_title(title: &str) {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         println!(
@@ -95,13 +129,13 @@ fn main() {
     let mut num_threads = 200;
     let mut start_port = 1;
     let mut end_port = 65535;
-    let mut timeout = 1000;
+    let mut timeout_ms = 1000;
     let mut get_banner = true;
 
     parse_arg!(&args, "-min", "--minport", start_port, "-min <port>");
     parse_arg!(&args, "-max", "--maxport", end_port, "-max <port>");
     parse_arg!(&args, "-t", "--threads", num_threads, "-t <threads>");
-    parse_arg!(&args, "-T", "--timeout", timeout, "-T <timeout in ms>");
+    parse_arg!(&args, "-T", "--timeout", timeout_ms, "-T <timeout in ms>");
 
     if num_threads < 1 {
         eprintln!("Minimum 1 thread");
@@ -114,22 +148,23 @@ fn main() {
         }
     }
 
-    let pool = ThreadPool::new(num_threads);
+    // limit the number of async tasks
+    let sem = std::sync::Arc::new(Semaphore::new(num_threads));
 
     println!("Scanning host: {}\n", target);
-
     for port in start_port..=end_port {
-        pool.execute(move || {
+        let permit = sem.clone().acquire_owned().await.unwrap();
+        tokio::spawn(async move {
             set_terminal_title(&format!("Probing port {}", port));
 
-            if !is_port_open(target, port, timeout) {
+            if !is_port_open(target, port, Duration::from_millis(timeout_ms)).await {
                 return;
             }
 
             if !get_banner {
                 println!("Port {} is open\n", port.to_string().bright_green());
             } else {
-                let banner = grab_banner(target, port, timeout);
+                let banner = grab_banner(target, port, Duration::from_millis(timeout_ms)).await;
                 if !banner.is_empty() {
                     println!(
                         "Port {} is open, banner:\n\n\r{}\n",
@@ -140,9 +175,7 @@ fn main() {
                     println!("Port {} is open\n", port.to_string().bright_green());
                 }
             }
+            drop(permit);
         });
     }
-
-    pool.join();
-    std::process::exit(0);
 }
