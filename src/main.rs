@@ -20,12 +20,12 @@ macro_rules! parse_arg {
     };
 }
 
-pub struct Rand {
+struct Rand {
     state: u8,
 }
 
 impl Rand {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let seed: u8 = rand::random();
         Self { state: seed }
     }
@@ -40,15 +40,14 @@ impl Rand {
 
 async fn is_port_open(ip: IpAddr, port: u16, timeout_ms: Duration) -> bool {
     let socket_addr = SocketAddr::new(ip, port);
-
-    timeout(timeout_ms, TcpStream::connect(&socket_addr))
-        .await
-        .is_ok()
+    match timeout(timeout_ms, TcpStream::connect(&socket_addr)).await {
+        Ok(Ok(_)) => true,
+        _ => false,
+    }
 }
 
 async fn grab_banner(ip: IpAddr, port: u16, timeout_ms: Duration) -> String {
     let addr = SocketAddr::new(ip, port);
-
     let mut stream = match timeout(timeout_ms, TcpStream::connect(addr)).await {
         Ok(Ok(s)) => s,
         _ => return String::new(),
@@ -64,10 +63,7 @@ async fn grab_banner(ip: IpAddr, port: u16, timeout_ms: Duration) -> String {
     let probe = format!("{}\r\n", string);
     let mut response = Vec::new();
 
-    if timeout(timeout_ms, stream.write_all(probe.as_bytes()))
-        .await
-        .is_err()
-    {
+    if let Err(_) = stream.write_all(probe.as_bytes()).await {
         return String::new();
     }
 
