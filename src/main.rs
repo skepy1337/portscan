@@ -1,10 +1,11 @@
 use colored::Colorize;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::time::Instant;
 use tokio::sync::Semaphore;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    time::{Duration, timeout},
+    time::{Duration, sleep, timeout},
 };
 
 macro_rules! parse_arg {
@@ -153,8 +154,17 @@ async fn main() {
         tokio::spawn(async move {
             set_terminal_title(&format!("Probing port {}", port));
 
+            // force a 50 ms sleep so it's not too fast on LAN (low latency)
+            let start = Instant::now();
             if !is_port_open(target, port, Duration::from_millis(timeout_ms)).await {
+                sleep(Duration::from_millis(50)).await;
+                drop(permit);
                 return;
+            }
+
+            let now = Instant::now();
+            if now.duration_since(start) < Duration::from_millis(50) {
+                sleep(Duration::from_millis(50) - now.duration_since(start)).await
             }
 
             if !get_banner {
